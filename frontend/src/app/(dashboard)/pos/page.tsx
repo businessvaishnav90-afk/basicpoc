@@ -959,8 +959,8 @@ export default function POSPage() {
     getCountryByCode(currentTenant?.country ?? '')?.locale,
   );
   const { printBill, printKot } = usePrinterStore();
-  const billingIsPrepaid = billingType === 'prepaid';
-  const shouldTakePaymentNow = billingIsPrepaid;
+  const _billingIsPrepaid = false;
+  const shouldTakePaymentNow = false;
 
   const printKotIfEnabled = async (order: Order) => {
     if (order.release_status && order.release_status !== 'released') return;

@@ -43,6 +43,7 @@ const PUBLIC_PATHS = [
   '/auth/register',
   '/auth/recover',
   '/setup',
+  '/master-admin',
 ];
 
 export const PAGE_PERMISSIONS = [
@@ -81,7 +82,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     pathname?.startsWith('/kds') ||
     pathname?.startsWith('/server-standalone') ||
     pathname === '/customer-display' ||
-    pathname?.startsWith('/customer-display/');
+    pathname?.startsWith('/customer-display/') ||
+    pathname?.startsWith('/master-admin');
 
   useEffect(() => {
     // Standalone KDS, Server App, and paired customer display pages manage their own
@@ -151,7 +153,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       }; // wait for the result before redirecting
     }
 
-    if (needsSetup && !isSetupPath) {
+    if (needsSetup && !isSetupPath && !isStandalonePath) {
       router.push('/setup');
       return;
     }

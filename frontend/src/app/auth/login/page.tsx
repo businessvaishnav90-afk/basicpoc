@@ -41,8 +41,6 @@ interface PinPickerUser {
 }
 
 const WHATSAPP_COMMUNITY_URL = 'https://chat.whatsapp.com/LxHobzv6d2X81NzrVfMjzo?mode=gi_t';
-const SETUP_STATUS_MAX_RETRIES = 2;
-const SETUP_STATUS_RETRY_DELAY_MS = 400;
 
 // Backend enum → leaf key maps for the tenant picker.
 type BusinessTypeKey = keyof AppConfig['Messages']['businessType'];
@@ -76,35 +74,9 @@ function LoginContent() {
   const tSupport = useTranslations('support');
 
   useEffect(() => {
-    const controller = new AbortController();
     let active = true;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const checkSetupStatus = (attempt: number) => {
-      fetch('/api/auth/setup/status', { signal: controller.signal })
-        .then((r) => {
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          return r.json();
-        })
-        .then((data) => {
-          if (active && data?.needsSetup) router.replace('/setup');
-        })
-        .catch((err) => {
-          if (
-            !active ||
-            (err instanceof Error && (err.name === 'CanceledError' || err.name === 'AbortError'))
-          )
-            return;
-          if (attempt < SETUP_STATUS_MAX_RETRIES) {
-            retryTimer = setTimeout(() => {
-              if (active) checkSetupStatus(attempt + 1);
-            }, SETUP_STATUS_RETRY_DELAY_MS);
-          }
-        });
-    };
-
-    checkSetupStatus(0);
-
+    // Local self-service owner signup is retired; authentication is strictly for existing users.
     fetch('/api/health')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -125,10 +97,8 @@ function LoginContent() {
 
     return () => {
       active = false;
-      if (retryTimer !== null) clearTimeout(retryTimer);
-      controller.abort();
     };
-  }, [router, t]);
+  }, [t]);
 
   useEffect(() => {
     loadFromStorage();

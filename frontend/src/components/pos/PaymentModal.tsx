@@ -32,6 +32,7 @@ import { useCartStore } from '@/store/cart';
 import { useConfirm } from '@/hooks/use-confirm';
 import { useTranslations, useLocale, type AppConfig } from 'use-intl';
 import { PAYMENT_METHODS, type CustomPaymentMethod } from '@/lib/payment-methods';
+import { Smartphone } from 'lucide-react';
 import { useFormatCurrency } from '@/hooks/useFormatCurrency';
 import { useFormatNumber } from '@/hooks/useFormatNumber';
 import { useCurrencyUnitAdapter } from '@/hooks/useCurrencyUnitAdapter';
@@ -588,26 +589,59 @@ export default function PaymentModal({
     api
       .get('/payment-methods')
       .then((res) => {
-        const methods: CustomPaymentMethod[] = res.data.payment_methods || [];
+        let methods: CustomPaymentMethod[] = res.data.payment_methods || [];
+        // Ensure Google Pay (GPay) exists as an active manual settlement method
+        const hasGPay = methods.some(
+          (m) =>
+            m.is_active &&
+            (m.name.toLowerCase() === 'google pay (gpay)' ||
+              m.name.toLowerCase() === 'google pay' ||
+              m.name.toLowerCase() === 'gpay'),
+        );
+        if (!hasGPay) {
+          methods = [
+            ...methods,
+            { id: 999999, name: 'Google Pay (GPay)', is_active: true, sort_order: 1 },
+          ];
+        }
         setCustomMethods(methods);
         setPayments((current) => [
-          ...PAYMENT_METHODS.map(
+          ...PAYMENT_METHODS.filter((m) => m.key === 'cash').map(
             (method) =>
               current.find(
                 (row) => row.method === method.key && row.payment_method_id === undefined,
               ) || { method: method.key, amount: '' },
           ),
-          ...methods.map(
-            (method) =>
-              current.find((row) => row.payment_method_id === method.id) || {
-                method: 'custom',
-                payment_method_id: method.id,
-                amount: '',
-              },
-          ),
+          ...methods
+            .filter(
+              (m) =>
+                m.is_active &&
+                (m.name.toLowerCase() === 'google pay (gpay)' ||
+                  m.name.toLowerCase() === 'google pay' ||
+                  m.name.toLowerCase() === 'gpay'),
+            )
+            .map(
+              (method) =>
+                current.find(
+                  (row) =>
+                    row.payment_method_id === method.id ||
+                    (row.method === 'custom' && row.payment_method_id === method.id) ||
+                    row.method.toLowerCase() === method.name.toLowerCase(),
+                ) || {
+                  method: 'custom',
+                  payment_method_id: method.id,
+                  amount: '',
+                },
+            ),
         ]);
       })
-      .catch(() => setCustomMethods([]));
+      .catch(() => {
+        setCustomMethods([{ id: 999999, name: 'Google Pay (GPay)', is_active: true, sort_order: 1 }]);
+        setPayments([
+          { method: 'cash', amount: '' },
+          { method: 'custom', payment_method_id: 999999, amount: '' },
+        ]);
+      });
   }, [bill.customer_id, cartCustomerId]);
 
   const walletAmt = toStoredUnit(parseFloat(walletAmount) || 0);
@@ -2040,7 +2074,7 @@ export default function PaymentModal({
                     method.key === payment.method && payment.payment_method_id === undefined,
                 );
                 const label = tenderLabel(payment);
-                const Icon = builtIn?.icon;
+                const Icon = builtIn?.icon || Smartphone;
                 const active = (parseFloat(payment.amount) || 0) > 0;
                 const isAppliedShare = appliedEqualShare?.index === idx;
                 return (
