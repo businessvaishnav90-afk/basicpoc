@@ -68,6 +68,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     next();
     return;
   }
+  // Master Admin endpoints authenticate with their own master secret key in masterAdminRoutes
+  if (reqPath === '/api/master-admin' || reqPath.startsWith('/api/master-admin/')) {
+    next();
+    return;
+  }
   // Allow unauthenticated GET requests for product images (so <img> tags work)
   if (reqPath.startsWith('/api/products/') && reqPath.endsWith('/image') && req.method === 'GET') {
     next();

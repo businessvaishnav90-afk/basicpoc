@@ -689,6 +689,14 @@ async function run() {
         selector ? selector(guardAuthState) : guardAuthState;
 
       Module._load = function (request: string, parent: unknown, isMain: boolean) {
+        if (request === 'next/navigation') {
+          return {
+            useRouter: () => ({
+              replace: (url: string) => replacedUrls.push(url),
+              push: (url: string) => replacedUrls.push(url),
+            }),
+          };
+        }
         if (request === 'react') {
           return {
             ...reactHooks,
@@ -871,6 +879,14 @@ async function run() {
       };
 
       Module._load = function (request: string, parent: unknown, isMain: boolean) {
+        if (request === 'next/navigation') {
+          return {
+            useRouter: () => ({
+              replace: (url: string) => replacedUrls.push(url),
+              push: (url: string) => replacedUrls.push(url),
+            }),
+          };
+        }
         if (request === 'react') {
           return {
             ...reactHooks,
@@ -1103,7 +1119,15 @@ async function run() {
 
       try {
         Module._load = function (request: string, parent: unknown, isMain: boolean) {
-          if (request === 'react') {
+          if (request === 'next/navigation') {
+          return {
+            useRouter: () => ({
+              replace: (url: string) => replacedUrls.push(url),
+              push: (url: string) => replacedUrls.push(url),
+            }),
+          };
+        }
+        if (request === 'react') {
             return {
               ...reactHooks,
               Suspense: 'Suspense',
@@ -1216,7 +1240,15 @@ async function run() {
         const AppMenuRowStub = () => ({ type: 'ApplicationMenuRow' });
         const WindowControlsStub = () => ({ type: 'WindowControls' });
         Module._load = function (request: string, parent: unknown, isMain: boolean) {
-          if (request === 'react') {
+          if (request === 'next/navigation') {
+          return {
+            useRouter: () => ({
+              replace: (url: string) => replacedUrls.push(url),
+              push: (url: string) => replacedUrls.push(url),
+            }),
+          };
+        }
+        if (request === 'react') {
             return {
               ...reactHooks,
               useSyncExternalStore: (_sub: unknown, getSnap: () => boolean) => getSnap(),
@@ -1329,7 +1361,15 @@ async function run() {
         };
 
         Module._load = function (request: string, parent: unknown, isMain: boolean) {
-          if (request === 'react') {
+          if (request === 'next/navigation') {
+          return {
+            useRouter: () => ({
+              replace: (url: string) => replacedUrls.push(url),
+              push: (url: string) => replacedUrls.push(url),
+            }),
+          };
+        }
+        if (request === 'react') {
             return {
               ...reactHooks,
             };
