@@ -26,6 +26,8 @@ import {
 } from './countries';
 import { clearInMemoryRevokedTokens, clearUserAuthCache } from './middleware/security';
 import { clearJWTSecretCache } from './security/jwt-secret';
+export { isCloudDatabaseConfigured, getPostgresPool, queryPostgres, closePostgresPool } from './pg-client';
+export { ensurePostgresOwner, type SeedOwnerResult } from './pg-init';
 
 const USER_ROLE_SQL_CHECK = `CHECK (role IN (${ROLE_KEYS.map((role) => `'${role}'`).join(', ')}))`;
 
