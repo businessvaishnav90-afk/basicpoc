@@ -40,7 +40,7 @@ import {
 } from '@/lib/order-payment-state';
 import type { Bill, Order, OrderItem } from '@/lib/types';
 import { useAuthStore } from '@/store/auth';
-import { isTerminalItemStatus } from '../../../../shared/order-item-status';
+import { isTerminalItemStatus } from '@shared/order-item-status';
 
 export { canPayScheduledOrder };
 

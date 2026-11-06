@@ -1,4 +1,4 @@
-import { countryName as englishCountryName, type Country } from '@countries';
+import { countryName as englishCountryName, type Country } from './countries-base';
 
 export {
   COUNTRIES,
@@ -18,6 +18,7 @@ export {
   getCurrencyUnitAdapter,
   resolveTenantCurrency,
   countryName,
+  canonicalizeLocalizedAmount,
   type Country,
   type CountryLocaleOptions,
   type LocalePreferences,
@@ -25,7 +26,8 @@ export {
   type DigitMode,
   type CalendarMode,
   type CurrencyUnitAdapter,
-} from '@countries';
+  type AmountFormat,
+} from './countries-base';
 
 const localizedDisplayNamesCache = new Map<string, Intl.DisplayNames>();
 

@@ -6,7 +6,7 @@ import {
   isPosItemSort,
   type PosCategorySort,
   type PosItemSort,
-} from '../../../shared/pos-sort';
+} from '@shared/pos-sort';
 
 export {
   POS_CATEGORY_SORTS,

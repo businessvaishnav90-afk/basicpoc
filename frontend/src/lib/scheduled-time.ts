@@ -11,4 +11,4 @@ export {
   type ScheduledTimeParseResult,
   type ScheduledTimeParseSuccess,
   type ScheduledTimeValidationCode,
-} from '../../../shared/scheduled-time';
+} from '@shared/scheduled-time';

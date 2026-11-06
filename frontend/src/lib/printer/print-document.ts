@@ -22,12 +22,12 @@ import { createTranslator } from 'use-intl/core';
 import { getCachedMessages, loadLocaleMessages } from '@/lib/i18n/loader';
 import { LANGUAGES, getLanguageDirection, type Language } from '@/lib/i18n/languages';
 import { usePosSettingsStore } from '@/store/pos-settings';
-import { getCountryByCode, getCurrencySymbol, resolveTenantCurrency } from '@countries';
+import { getCountryByCode, getCurrencySymbol, resolveTenantCurrency } from '@/lib/countries';
 import { resolveTaxComponents } from './tax-components';
 import { shouldShowCustomerNumber } from '@print/document';
 import type { Bill, Order, OrderItem } from '@/lib/types';
 import { formatItemHeading } from './item-heading';
-import { isExcludedFromBillReceipt } from '../../../../shared/order-item-status';
+import { isExcludedFromBillReceipt } from '@shared/order-item-status';
 
 /** Business contact facts and visibility flags for one bill print run. */
 export interface BillBusinessOptions {

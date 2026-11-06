@@ -1,4 +1,4 @@
-import type { PermissionArea, PermissionId } from '../../../../shared/permissions';
+import type { PermissionArea, PermissionId } from '@shared/permissions';
 import {
   PERMISSION_AREA_KEYS,
   PERMISSION_LABEL_KEYS,

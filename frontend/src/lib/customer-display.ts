@@ -1,7 +1,7 @@
 import {
   projectBoardStatusFromItems,
   type OrderItemStatusLike,
-} from '../../../shared/order-item-status';
+} from '@shared/order-item-status';
 
 export const CUSTOMER_DISPLAY_STATUSES = ['pending', 'preparing', 'ready'] as const;
 

@@ -4,8 +4,8 @@ import {
   parsePrintLanguagePolicy,
   resolveKotLanguage,
   resolveReceiptLanguages,
-} from '../../../shared/print/policy';
-import type { KotLanguagePolicy, ReceiptLanguagePolicy, ResolvedPrintLanguages } from '../../../shared/print/types';
+} from '@print/policy';
+import type { KotLanguagePolicy, ReceiptLanguagePolicy, ResolvedPrintLanguages } from '@print/types';
 import { LANGUAGES, isLanguage, type Language } from './i18n/languages';
 import { loadLocaleMessages } from './i18n/loader';
 import type { Tenant } from './types';

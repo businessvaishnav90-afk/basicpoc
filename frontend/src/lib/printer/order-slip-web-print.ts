@@ -4,7 +4,7 @@ import type { Order } from '@/lib/types';
 import { formatCurrencyForTenant } from '@/lib/countries';
 import { escapeHtml } from './web-print';
 import { formatItemHeading } from './item-heading';
-import { isTerminalItemStatus } from '../../../../shared/order-item-status';
+import { isTerminalItemStatus } from '@shared/order-item-status';
 
 export interface OrderSlipWebPrintOptions {
   /** 58 mm or 80mm paper. Controls font sizing. Default: 58 */

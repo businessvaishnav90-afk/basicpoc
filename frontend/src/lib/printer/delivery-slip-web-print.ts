@@ -17,7 +17,7 @@ import {
   sanitizeDeliverySlipPaymentMethod,
   type DeliverySlipPrintData,
 } from '@print/document';
-import { isTerminalItemStatus } from '../../../../shared/order-item-status';
+import { isTerminalItemStatus } from '@shared/order-item-status';
 
 export interface DeliverySlipWebPrintOptions {
   /** 58 mm or 80mm paper. Controls font sizing. Default: 58 */

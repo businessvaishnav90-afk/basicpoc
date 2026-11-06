@@ -20,9 +20,9 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@countries": ["../main/countries.ts"],
-      "@print/*": ["../shared/print/*"],
-      "@shared/*": ["../shared/*"]
+      "@countries": ["./src/lib/countries.ts"],
+      "@print/*": ["./src/shared/print/*"],
+      "@shared/*": ["./src/shared/*"]
     }
   },
   "include": [

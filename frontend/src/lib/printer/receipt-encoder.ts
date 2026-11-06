@@ -54,7 +54,7 @@ import type { ResolvedPrintLanguages } from '@print/types';
 import { getLogoRasterBands } from '@print/image-raster';
 import { concatBytes, encodeGsV0Band } from '@print/raster';
 import { formatItemHeading } from './item-heading';
-import { isExcludedFromBillReceipt } from '../../../../shared/order-item-status';
+import { isExcludedFromBillReceipt } from '@shared/order-item-status';
 
 export interface ReceiptOptions {
   /** 58 mm (32 cols) or 80 mm (42 cols). Default: 58 */

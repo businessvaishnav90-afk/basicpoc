@@ -40,8 +40,8 @@ import { CartPriceOverrideModal } from '@/components/pos/CartPriceOverrideModal'
 import { OrderDetailsDrawer } from '@/components/pos/OrderDetailsDrawer';
 import { calculateAppliedCharges } from '@/lib/charges';
 import { chargesForOrderType, useChargesStore } from '@/store/charges';
-import { getCurrencyFractionDigits } from '@countries';
-import { isTerminalItemStatus } from '../../../../shared/order-item-status';
+import { getCurrencyFractionDigits } from '@/lib/countries';
+import { isTerminalItemStatus } from '@shared/order-item-status';
 import { formatScheduledInstantForDisplay, parseScheduledForInput } from '@/lib/scheduled-time';
 
 interface Props {

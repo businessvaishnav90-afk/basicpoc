@@ -14,7 +14,7 @@ import { useAuthStore } from '@/store/auth';
 import { tenantCan } from '@/lib/permissions';
 import MoveTableModal from '@/components/tables/MoveTableModal';
 import EditOrderItemModal from '@/components/orders/EditOrderItemModal';
-import { isTerminalItemStatus } from '../../../../shared/order-item-status';
+import { isTerminalItemStatus } from '@shared/order-item-status';
 
 interface Props {
   table: Table;

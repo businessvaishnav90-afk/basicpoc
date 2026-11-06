@@ -17,7 +17,7 @@ import {
   sanitizeDeliverySlipPaymentMethod,
   type DeliverySlipPrintData,
 } from '@print/document';
-import { isTerminalItemStatus } from '../../../../shared/order-item-status';
+import { isTerminalItemStatus } from '@shared/order-item-status';
 
 export type DeliverySlipPayment = NonNullable<DeliverySlipPrintData['payment']>;
 

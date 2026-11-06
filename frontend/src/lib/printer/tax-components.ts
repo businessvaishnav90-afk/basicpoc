@@ -1,5 +1,5 @@
 import type { Bill, Order } from '@/lib/types';
-import { isTerminalItemStatus } from '../../../../shared/order-item-status';
+import { isTerminalItemStatus } from '@shared/order-item-status';
 
 export interface DisplayTaxComponent {
   title: string;

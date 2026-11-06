@@ -36,7 +36,7 @@ import {
   type ThermalPrinterCapabilities,
 } from '@print/thermal-capabilities';
 import { rasterCapabilityEnabled } from '@print/raster';
-import { isExcludedFromBillReceipt } from '../../../../shared/order-item-status';
+import { isExcludedFromBillReceipt } from '@shared/order-item-status';
 
 export interface TaxBillOptions {
   /** 58 mm (2.5", 32 cols) or 80 mm (3.5", 42 cols). Default: 58 */

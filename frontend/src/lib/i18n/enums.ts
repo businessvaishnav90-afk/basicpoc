@@ -4,8 +4,8 @@
 import { ORDER_TYPE_LABEL_KEYS } from '../order-types';
 import type { Order, Table, OrderItem } from '../types';
 import type { AppConfig } from 'use-intl';
-import { ROLE_LABEL_KEYS as SHARED_ROLE_LABEL_KEYS } from '../../../../shared/role-permissions';
-import type { PermissionArea, PermissionId } from '../../../../shared/permissions';
+import { ROLE_LABEL_KEYS as SHARED_ROLE_LABEL_KEYS } from '@shared/role-permissions';
+import type { PermissionArea, PermissionId } from '@shared/permissions';
 
 export { ORDER_TYPE_LABEL_KEYS };
 

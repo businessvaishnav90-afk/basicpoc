@@ -1,4 +1,4 @@
-import { canonicalizeLocalizedAmount } from '@countries';
+import { canonicalizeLocalizedAmount } from '@/lib/countries';
 
 export type CurrencyAmountTarget = 'payment' | 'wallet' | 'discount';
 export type CurrencyDiscountType = 'percentage' | 'amount';

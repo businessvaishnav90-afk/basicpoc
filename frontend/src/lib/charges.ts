@@ -22,7 +22,7 @@ export {
   serializeAppliedCharges,
   toStandardChargeColumns,
   totalAppliedCharges,
-} from '../../../shared/charges';
+} from '@shared/charges';
 export type {
   AppliedCharge,
   ChargeCalculationBasis,
@@ -30,4 +30,4 @@ export type {
   ChargeOrderType,
   ChargeType,
   ReceiptChargeLine,
-} from '../../../shared/charges';
+} from '@shared/charges';

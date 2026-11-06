@@ -49,8 +49,8 @@ import { useFormatDate } from '@/hooks/useFormatDate';
 import { parseDbTimestamp } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import { formatItemHeading } from '@/lib/printer/item-heading';
-import { isTerminalItemStatus } from '../../../../shared/order-item-status';
-import { ROLE_ACCESS, hasRole } from '../../../../shared/role-permissions';
+import { isTerminalItemStatus } from '@shared/order-item-status';
+import { ROLE_ACCESS, hasRole } from '@shared/role-permissions';
 import {
   canCheckoutOrder,
   getOrderBills,

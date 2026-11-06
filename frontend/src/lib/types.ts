@@ -1,6 +1,6 @@
 import type { Language } from '@/lib/i18n';
 import type { CurrencyDisplay, DigitMode, CalendarMode } from '@/lib/countries';
-import type { PermissionId } from '../../../shared/permissions';
+import type { PermissionId } from '@shared/permissions';
 
 export interface User {
   id: number;

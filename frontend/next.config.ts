@@ -1,5 +1,4 @@
 import type { NextConfig } from 'next';
-import path from 'node:path';
 /**
  * NEXT_BUILD_MODE=desktop  →  static export for Electron (FloDesktop)
  * NEXT_BUILD_MODE unset    →  standard Next.js server mode (FloPOS cloud)
@@ -25,13 +24,10 @@ const nextConfig: NextConfig = {
     unoptimized: isDesktop,
   },
 
-  // Silence the "multiple lockfiles / inferred workspace root" warning.
-  // Allow imports from /main (countries derivation shared with backend) via alias;
-  // root must encompass both frontend/ and main/, so it points at the repo root.
+  // Next.js Turbopack config
   turbopack: {
-    root: path.resolve(process.cwd(), '..'),
     resolveAlias: {
-      '@countries': '../main/countries.ts',
+      '@countries': './src/lib/countries.ts',
     },
   },
 };

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useTranslations } from 'use-intl';
 import { useFormatCurrency } from '@/hooks/useFormatCurrency';
 import type { Bill, Order, OrderItem } from '@/lib/types';
-import { isTerminalItemStatus } from '../../../../shared/order-item-status';
+import { isTerminalItemStatus } from '@shared/order-item-status';
 
 type SplitMode = 'table' | 'guest';
 

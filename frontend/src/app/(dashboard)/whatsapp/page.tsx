@@ -51,7 +51,7 @@ import {
   extractTriggerRule,
   insertPlaceholderAtSelection,
   type WhatsAppAutomationConfig,
-} from '../../../../../shared/whatsapp-automation';
+} from '@shared/whatsapp-automation';
 
 interface WhatsAppStatus {
   enabled: boolean;
