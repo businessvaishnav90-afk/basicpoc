@@ -4,17 +4,29 @@ import { ensurePostgresOwner } from '@/lib/server/init';
 
 export const dynamic = 'force-dynamic';
 
+interface DbPinUser {
+  id: string;
+  name: string;
+  role: string;
+  is_active?: unknown;
+}
+
 export async function GET() {
   if (!isCloudDatabaseConfigured()) {
     return NextResponse.json({ users: [] });
   }
 
   try {
-    await ensurePostgresOwner();
-    const { rows } = await queryPostgres<{ id: string; name: string; role: string }>(
-      `SELECT id, name, role
+    try {
+      await ensurePostgresOwner();
+    } catch (seedErr: unknown) {
+      console.error('[DB_AUTH_ERROR]: PinUsers seed warning:', seedErr);
+    }
+
+    const { rows } = await queryPostgres<DbPinUser>(
+      `SELECT id, name, role, is_active
        FROM users
-       WHERE is_active = 1 AND pin_hash IS NOT NULL
+       WHERE pin_hash IS NOT NULL
        ORDER BY CASE role
          WHEN 'owner' THEN 1
          WHEN 'manager' THEN 2
@@ -25,19 +37,26 @@ export async function GET() {
        END, name ASC`,
     );
 
-    return NextResponse.json({
-      users: rows.map((r) => ({
+    const activeUsers = rows
+      .filter((r) => {
+        return (
+          r.is_active === 1 ||
+          r.is_active === true ||
+          r.is_active === '1' ||
+          r.is_active === 'true' ||
+          r.is_active === null ||
+          r.is_active === undefined
+        );
+      })
+      .map((r) => ({
         id: String(r.id),
         name: String(r.name),
         role: String(r.role),
-      })),
-    });
-  } catch (error: any) {
-    console.error('[Auth/PinUsers] Error fetching pin users:', {
-      message: error?.message,
-      code: error?.code,
-    });
+      }));
+
+    return NextResponse.json({ users: activeUsers });
+  } catch (error: unknown) {
+    console.error('[DB_AUTH_ERROR]: [Auth/PinUsers] Error fetching pin users:', error);
     return NextResponse.json({ users: [] });
   }
 }
-

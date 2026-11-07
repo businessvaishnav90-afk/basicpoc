@@ -30,6 +30,25 @@ const nextConfig: NextConfig = {
       '@countries': './src/lib/countries.ts',
     },
   },
+
+  // Decouple native binary modules from serverless bundles
+  serverExternalPackages: ['better-sqlite3', 'pg'],
+
+  // Exclude native SQLite from Webpack compilation
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = config.externals || [];
+      if (Array.isArray(config.externals)) {
+        config.externals.push('better-sqlite3');
+      }
+    }
+    config.resolve = config.resolve || {};
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      'better-sqlite3': false,
+    };
+    return config;
+  },
 };
 
 export default nextConfig;

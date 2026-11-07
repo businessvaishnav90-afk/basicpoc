@@ -5,6 +5,21 @@ import { isCloudDatabaseConfigured, queryPostgres } from '@/lib/server/db';
 
 export const dynamic = 'force-dynamic';
 
+interface DbUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  is_active?: unknown;
+}
+
+interface DecodedToken {
+  userId: string;
+  email?: string;
+  role?: string;
+  remember?: boolean;
+}
+
 function getJWTSecret(): string {
   return process.env.JWT_SECRET || 'flocafe-cloud-jwt-secret-key-32chars!';
 }
@@ -17,19 +32,28 @@ export async function POST(req: NextRequest) {
     }
 
     const token = authHeader.slice(7);
-    const decoded = jwt.verify(token, getJWTSecret()) as any;
+    const decoded = jwt.verify(token, getJWTSecret()) as DecodedToken;
 
     if (!isCloudDatabaseConfigured()) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
     }
 
-    const { rows } = await queryPostgres(
+    const { rows } = await queryPostgres<DbUser>(
       'SELECT id, name, email, role, is_active FROM users WHERE id = $1',
       [decoded.userId],
     );
 
-    const user = rows[0] as any;
-    if (!user || user.is_active !== 1) {
+    const user = rows[0];
+    const isActive =
+      Boolean(user) &&
+      (user.is_active === 1 ||
+        user.is_active === true ||
+        user.is_active === '1' ||
+        user.is_active === 'true' ||
+        user.is_active === null ||
+        user.is_active === undefined);
+
+    if (!user || !isActive) {
       return NextResponse.json({ error: 'Invalid token or inactive user' }, { status: 401 });
     }
 
@@ -86,9 +110,8 @@ export async function POST(req: NextRequest) {
       token_type: 'bearer',
       tenant,
     });
-  } catch (error: any) {
-    console.error('[Auth/TenantsSelect] Error:', error);
+  } catch (error: unknown) {
+    console.error('[DB_AUTH_ERROR]: [Auth/TenantsSelect] Error:', error);
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
   }
 }
-

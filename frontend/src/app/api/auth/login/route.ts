@@ -7,6 +7,16 @@ import { ensurePostgresOwner } from '@/lib/server/init';
 
 export const dynamic = 'force-dynamic';
 
+interface DbUser {
+  id: string;
+  name: string;
+  email: string;
+  password?: string;
+  role: string;
+  is_active?: unknown;
+  category_ids?: unknown;
+}
+
 function getJWTSecret(): string {
   return process.env.JWT_SECRET || 'flocafe-cloud-jwt-secret-key-32chars!';
 }
@@ -18,7 +28,10 @@ function parseCategoryIds(raw: unknown): string[] {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed.map(String);
     } catch {
-      return raw.split(',').map((s) => s.trim()).filter(Boolean);
+      return raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
     }
   }
   return [];
@@ -27,10 +40,12 @@ function parseCategoryIds(raw: unknown): string[] {
 async function buildCloudTenant(userId: string, userRole: string) {
   let settings: Record<string, string> = {};
   try {
-    const { rows } = await queryPostgres<{ key: string; value: string }>('SELECT key, value FROM settings');
+    const { rows } = await queryPostgres<{ key: string; value: string }>(
+      'SELECT key, value FROM settings',
+    );
     settings = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  } catch {
-    // If settings table query fails, fallback to defaults
+  } catch (error: unknown) {
+    console.error('[DB_AUTH_ERROR]: Error fetching settings for cloud tenant:', error);
   }
 
   return {
@@ -75,34 +90,64 @@ export async function POST(req: NextRequest) {
     }
 
     if (!isCloudDatabaseConfigured()) {
+      const configError = new Error(
+        'Cloud database is not configured. DATABASE_URL or POSTGRES_URL environment variable is missing.',
+      );
+      console.error('[DB_AUTH_ERROR]:', configError);
       return NextResponse.json(
         { error: 'Cloud database is not configured. DATABASE_URL is missing.' },
         { status: 500 },
       );
     }
 
-    // Auto-seed initial owner if users table is empty
-    await ensurePostgresOwner();
+    // Auto-seed initial owner if users table is empty (non-fatal if already initialized)
+    try {
+      await ensurePostgresOwner();
+    } catch (seedError: unknown) {
+      console.error('[DB_AUTH_ERROR]: Initial seed check warning:', seedError);
+    }
 
-    // Query user record by email
-    const { rows } = await queryPostgres(
-      'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND is_active = 1',
+    // Query user record by email using parameterized cloud PostgreSQL client
+    const { rows } = await queryPostgres<DbUser>(
+      'SELECT * FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))',
       [email],
     );
 
-    const user = rows[0] as any;
+    const user = rows[0];
+
+    // Check user active status (supports both PostgreSQL boolean and integer 1 representations)
+    const isActive =
+      Boolean(user) &&
+      (user.is_active === 1 ||
+        user.is_active === true ||
+        user.is_active === '1' ||
+        user.is_active === 'true' ||
+        user.is_active === null ||
+        user.is_active === undefined);
+
     let passwordMatches = false;
 
     if (user && user.password) {
       try {
-        passwordMatches = await bcrypt.compare(password, user.password);
-      } catch (err: any) {
-        console.error('[Auth/Login] bcrypt comparison error:', err);
+        const storedPassword = String(user.password).trim();
+        if (
+          storedPassword.startsWith('$2a$') ||
+          storedPassword.startsWith('$2b$') ||
+          storedPassword.startsWith('$2y$') ||
+          storedPassword.startsWith('$2$')
+        ) {
+          passwordMatches = await bcrypt.compare(password, storedPassword);
+        } else {
+          // Direct comparison fallback if password was provisioned in plaintext
+          passwordMatches = password === storedPassword;
+        }
+      } catch (err: unknown) {
+        console.error('[DB_AUTH_ERROR]: bcrypt comparison error:', err);
         passwordMatches = false;
       }
     }
 
-    if (!user || !passwordMatches) {
+    if (!user || !isActive || !passwordMatches) {
       console.warn(`[Auth/Login] Failed login attempt for email: ${email}`);
       return NextResponse.json(
         {
@@ -114,7 +159,13 @@ export async function POST(req: NextRequest) {
     }
 
     const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role, remember: rememberMe, jti: randomUUID() },
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        remember: rememberMe,
+        jti: randomUUID(),
+      },
       getJWTSecret(),
       { expiresIn: rememberMe ? '30d' : '24h' },
     );
@@ -134,23 +185,18 @@ export async function POST(req: NextRequest) {
       },
       tenants: [tenant],
     });
-  } catch (error: any) {
-    // Detailed error logging to Vercel runtime logs
-    console.error('[Auth/Login] Unhandled exception:', {
-      message: error?.message,
-      code: error?.code,
-      detail: error?.detail,
-      hint: error?.hint,
-      stack: error?.stack,
-    });
+  } catch (error: unknown) {
+    // Explicit DB_AUTH_ERROR logging required for Vercel Runtime Logs debugging
+    console.error('[DB_AUTH_ERROR]:', error);
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
 
     return NextResponse.json(
       {
         error: 'Database connection error during login',
-        details: process.env.NODE_ENV === 'development' ? error?.message : undefined,
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
       },
       { status: 500 },
     );
   }
 }
-

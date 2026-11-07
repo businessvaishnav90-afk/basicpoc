@@ -16,28 +16,29 @@ export async function GET() {
   }
 
   try {
-    // Verify PostgreSQL connection and ensure master owner exists
-    await ensurePostgresOwner();
+    try {
+      await ensurePostgresOwner();
+    } catch (seedErr: unknown) {
+      console.error('[DB_AUTH_ERROR]: [Health] Seed warning:', seedErr);
+    }
+
     const result = await queryPostgres('SELECT 1 as connected');
     const isConnected = (result.rowCount ?? 0) > 0 || (result.rows && result.rows.length > 0);
 
     return NextResponse.json({
       status: isConnected ? 'ok' : 'error',
       db: isConnected ? 'ok' : 'Unable to query PostgreSQL',
-      service: 'FloCafe Cloud API (Supabase PostgreSQL)',
+      service: 'FloCafe Cloud API (PostgreSQL)',
       timestamp: new Date().toISOString(),
     });
-  } catch (error: any) {
-    console.error('[Health] Database connection error:', {
-      message: error?.message,
-      code: error?.code,
-      stack: error?.stack,
-    });
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('[DB_AUTH_ERROR]: [Health] Database connection error:', error);
 
     return NextResponse.json(
       {
         status: 'error',
-        db: error?.message || 'Database connection error',
+        db: errorMsg || 'Database connection error',
         service: 'FloCafe Cloud API',
         timestamp: new Date().toISOString(),
       },
@@ -45,4 +46,3 @@ export async function GET() {
     );
   }
 }
-
