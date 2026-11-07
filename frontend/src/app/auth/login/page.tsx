@@ -78,13 +78,17 @@ function LoginContent() {
 
     // Local self-service owner signup is retired; authentication is strictly for existing users.
     fetch('/api/health')
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => (r.ok ? r.json() : r.json().catch(() => null)))
       .then((data) => {
         if (active && data && data.status !== 'ok') {
-          setDbError(data.db || t('dbErrorPrefix'));
+          setDbError(data.db || data.error || data.details || t('dbErrorPrefix'));
         }
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        if (active && e instanceof Error) {
+          setDbError(e.message);
+        }
+      });
 
     fetch('/api/auth/pin-users')
       .then((r) => (r.ok ? r.json() : null))
@@ -161,7 +165,22 @@ function LoginContent() {
           setLoginError(t('connectionFailed'));
         } else {
           // Other server-side failures belong under the database/setup banner.
-          setDbError(t('loginFailed'));
+          const axiosErr = err as {
+            response?: {
+              data?: {
+                details?: string;
+                message?: string;
+                error?: string;
+              };
+            };
+            message?: string;
+          };
+          const serverError =
+            axiosErr?.response?.data?.details ||
+            axiosErr?.response?.data?.message ||
+            axiosErr?.response?.data?.error ||
+            axiosErr?.message;
+          setDbError(serverError || t('loginFailed'));
         }
       }
     } finally {
@@ -200,7 +219,22 @@ function LoginContent() {
         } else if (failure.status === undefined) {
           setPinError(t('connectionFailed'));
         } else {
-          setPinError(t('loginFailed'));
+          const axiosErr = err as {
+            response?: {
+              data?: {
+                details?: string;
+                message?: string;
+                error?: string;
+              };
+            };
+            message?: string;
+          };
+          const serverError =
+            axiosErr?.response?.data?.details ||
+            axiosErr?.response?.data?.message ||
+            axiosErr?.response?.data?.error ||
+            axiosErr?.message;
+          setPinError(serverError || t('loginFailed'));
         }
       }
       setPin('');

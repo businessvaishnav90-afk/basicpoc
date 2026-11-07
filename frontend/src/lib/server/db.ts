@@ -39,18 +39,50 @@ export function isCloudDatabaseConfigured(): boolean {
 }
 
 /**
- * Determines SSL configuration for pg Pool.
- * Cloud PostgreSQL providers (Supabase, Neon, AWS RDS) typically require SSL with
- * non-strict certificate validation in serverless containers without custom CA bundles.
- * Local PostgreSQL (localhost / 127.0.0.1) or explicit sslmode=disable disables SSL.
+ * Formats connection string for serverless environments and configures SSL.
+ * Automatically sanitizes `?sslmode=require` from URL parameters so node-postgres (pg)
+ * does not enforce strict CA certificate verification, which causes
+ * "self-signed certificate in certificate chain" errors on serverless lambdas.
  */
-function resolveSslConfig(connectionString: string): boolean | { rejectUnauthorized: boolean } {
-  if (process.env.DATABASE_SSL === 'false') return false;
-  if (process.env.DATABASE_SSL === 'true') return { rejectUnauthorized: false };
-  if (connectionString.includes('sslmode=disable')) return false;
-  if (connectionString.includes('localhost') || connectionString.includes('127.0.0.1'))
-    return false;
-  return { rejectUnauthorized: false };
+export function formatServerlessConnectionString(rawUrl: string): {
+  connectionString: string;
+  ssl: boolean | { rejectUnauthorized: boolean };
+} {
+  let connectionString = rawUrl.trim();
+
+  if (process.env.DATABASE_SSL === 'false' || connectionString.includes('sslmode=disable')) {
+    return { connectionString, ssl: false };
+  }
+
+  if (connectionString.includes('localhost') || connectionString.includes('127.0.0.1')) {
+    return { connectionString, ssl: false };
+  }
+
+  try {
+    const url = new URL(connectionString);
+    if (url.searchParams.has('sslmode')) {
+      const mode = url.searchParams.get('sslmode');
+      if (
+        mode === 'require' ||
+        mode === 'prefer' ||
+        mode === 'verify-ca' ||
+        mode === 'verify-full'
+      ) {
+        url.searchParams.delete('sslmode');
+        connectionString = url.toString();
+      }
+    }
+  } catch {
+    connectionString = connectionString.replace(
+      /([?&])sslmode=(?:require|prefer|verify-ca|verify-full)(&|$)/,
+      (_match, p1, p2) => (p2 === '&' ? p1 : ''),
+    );
+  }
+
+  return {
+    connectionString,
+    ssl: { rejectUnauthorized: false },
+  };
 }
 
 /**
@@ -58,19 +90,21 @@ function resolveSslConfig(connectionString: string): boolean | { rejectUnauthori
  * Uses global caching to prevent exhausting connection limits across function warm-starts.
  */
 export function getPostgresPool(): Pool {
-  const connectionString = getDatabaseUrl();
-  if (!connectionString) {
+  const rawUrl = getDatabaseUrl();
+  if (!rawUrl) {
     throw new Error(
       'DATABASE_URL or POSTGRES_URL environment variable is missing. Cloud database is not configured.',
     );
   }
 
   if (!globalThis.__flocafe_pg_pool) {
+    const { connectionString, ssl } = formatServerlessConnectionString(rawUrl);
+
     const config: PoolConfig = {
       connectionString,
-      ssl: resolveSslConfig(connectionString),
+      ssl,
       // Keep pool small in serverless lambdas to stay within cloud Postgres connection limits
-      max: Number(process.env.DATABASE_POOL_MAX || 3),
+      max: Number(process.env.DATABASE_POOL_MAX || 2),
       idleTimeoutMillis: 10000,
       // 10s connection timeout gives waking cloud databases (Supabase/Neon cold start) time to respond
       connectionTimeoutMillis: 10000,
@@ -79,6 +113,11 @@ export function getPostgresPool(): Pool {
     const pool = new Pool(config);
 
     pool.on('error', (err) => {
+      console.error(
+        '[VERCEL_DB_ERROR]: Unexpected client pool error in PostgreSQL layer:',
+        err.message,
+        err.stack,
+      );
       console.error('[DB_AUTH_ERROR]: Unexpected client pool error in PostgreSQL layer:', err);
     });
 

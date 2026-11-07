@@ -19,6 +19,9 @@ export async function GET() {
     try {
       await ensurePostgresOwner();
     } catch (seedErr: unknown) {
+      const seedMsg = seedErr instanceof Error ? seedErr.message : String(seedErr);
+      const seedStack = seedErr instanceof Error ? seedErr.stack : undefined;
+      console.error('[VERCEL_DB_ERROR]: [Health] Seed warning:', seedMsg, seedStack);
       console.error('[DB_AUTH_ERROR]: [Health] Seed warning:', seedErr);
     }
 
@@ -33,12 +36,16 @@ export async function GET() {
     });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('[VERCEL_DB_ERROR]: [Health] Database connection error:', errorMsg, errorStack);
     console.error('[DB_AUTH_ERROR]: [Health] Database connection error:', error);
 
     return NextResponse.json(
       {
         status: 'error',
         db: errorMsg || 'Database connection error',
+        error: errorMsg,
+        details: errorMsg,
         service: 'FloCafe Cloud API',
         timestamp: new Date().toISOString(),
       },

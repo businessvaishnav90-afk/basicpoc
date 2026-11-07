@@ -56,6 +56,13 @@ export async function GET() {
 
     return NextResponse.json({ users: activeUsers });
   } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error(
+      '[VERCEL_DB_ERROR]: [Auth/PinUsers] Error fetching pin users:',
+      errorMsg,
+      errorStack,
+    );
     console.error('[DB_AUTH_ERROR]: [Auth/PinUsers] Error fetching pin users:', error);
     return NextResponse.json({ users: [] });
   }

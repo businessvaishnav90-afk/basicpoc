@@ -111,6 +111,9 @@ export async function POST(req: NextRequest) {
       tenant,
     });
   } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('[VERCEL_DB_ERROR]: [Auth/TenantsSelect] Error:', errorMsg, errorStack);
     console.error('[DB_AUTH_ERROR]: [Auth/TenantsSelect] Error:', error);
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
   }

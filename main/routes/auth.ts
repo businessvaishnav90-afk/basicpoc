@@ -140,7 +140,9 @@ function buildLocalTenant(db: ReturnType<typeof getDatabase>, userId: string, us
 }
 
 async function buildCloudTenant(userId: string, userRole: string) {
-  const { rows } = await queryPostgres<{ key: string; value: string }>('SELECT key, value FROM settings');
+  const { rows } = await queryPostgres<{ key: string; value: string }>(
+    'SELECT key, value FROM settings',
+  );
   const s: Record<string, string> = Object.fromEntries(rows.map((r) => [r.key, r.value]));
 
   let snapshot: RegionalSnapshot | null = null;
@@ -308,22 +310,54 @@ router.post(
       }
 
       if (isCloudDatabaseConfigured()) {
-        await ensurePostgresOwner();
+        try {
+          await ensurePostgresOwner();
+        } catch (seedErr: any) {
+          console.error(
+            '[VERCEL_DB_ERROR]: Postgres initialization warning:',
+            seedErr?.message,
+            seedErr?.stack,
+          );
+        }
         const { rows } = await queryPostgres(
-          'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND is_active = 1',
+          'SELECT * FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))',
           [email],
         );
         const user = rows[0] as any;
+        const isActive =
+          Boolean(user) &&
+          (user.is_active === 1 ||
+            user.is_active === true ||
+            user.is_active === '1' ||
+            user.is_active === 'true' ||
+            user.is_active === null ||
+            user.is_active === undefined);
+
         let passwordMatches = false;
-        if (user) {
+        if (user && user.password) {
           try {
-            passwordMatches = await bcrypt.compare(password, user.password);
-          } catch {
+            const stored = String(user.password).trim();
+            if (
+              stored.startsWith('$2a$') ||
+              stored.startsWith('$2b$') ||
+              stored.startsWith('$2y$') ||
+              stored.startsWith('$2$')
+            ) {
+              passwordMatches = await bcrypt.compare(password, stored);
+            } else {
+              passwordMatches = password === stored;
+            }
+          } catch (bcryptErr: any) {
+            console.error(
+              '[VERCEL_DB_ERROR]: bcrypt comparison error:',
+              bcryptErr?.message,
+              bcryptErr?.stack,
+            );
             passwordMatches = false;
           }
         }
 
-        if (!user || !passwordMatches) {
+        if (!user || !isActive || !passwordMatches) {
           const attemptsRemaining = incrementFailedLogin(ip);
           return res.status(401).json({
             error: 'Invalid credentials',
@@ -356,6 +390,13 @@ router.post(
           },
           tenants: [tenant],
         });
+      }
+
+      // Purge better-sqlite3 from serverless path: Never call getDatabase() on Vercel
+      if (process.env.VERCEL || process.env.DATABASE_URL) {
+        throw new Error(
+          'Cloud database is not configured. DATABASE_URL or POSTGRES_URL environment variable is missing.',
+        );
       }
 
       const db = getDatabase();
@@ -406,9 +447,13 @@ router.post(
         tenants: [tenant],
       });
     } catch (error: any) {
+      console.error('[VERCEL_DB_ERROR]:', error?.message || error, error?.stack);
       console.error('[Auth] Login error:', error);
       console.error('[API] Internal error:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({
+        error: error?.message || 'Internal server error',
+        message: error?.message,
+      });
     }
   }),
 );
@@ -416,12 +461,15 @@ router.post(
 // ── GET /api/auth/pin-users ───────────────────────────────────────────────────
 // Public quick-switch user picker directory: active users with a PIN configured.
 
-router.get('/pin-users', authRateLimit({ max: 600 }), asyncHandler(async (_req: Request, res: Response) => {
-  try {
-    if (isCloudDatabaseConfigured()) {
-      await ensurePostgresOwner();
-      const { rows } = await queryPostgres<{ id: string; name: string; role: string }>(
-        `SELECT id, name, role
+router.get(
+  '/pin-users',
+  authRateLimit({ max: 600 }),
+  asyncHandler(async (_req: Request, res: Response) => {
+    try {
+      if (isCloudDatabaseConfigured()) {
+        await ensurePostgresOwner();
+        const { rows } = await queryPostgres<{ id: string; name: string; role: string }>(
+          `SELECT id, name, role
          FROM users
          WHERE is_active = 1 AND pin_hash IS NOT NULL
          ORDER BY CASE role
@@ -432,20 +480,20 @@ router.get('/pin-users', authRateLimit({ max: 600 }), asyncHandler(async (_req: 
            WHEN 'chef' THEN 5
            ELSE 6
          END, name ASC`,
-      );
-      return res.json({
-        users: rows.map((row) => ({
-          id: String(row.id),
-          name: String(row.name),
-          role: String(row.role),
-        })),
-      });
-    }
+        );
+        return res.json({
+          users: rows.map((row) => ({
+            id: String(row.id),
+            name: String(row.name),
+            role: String(row.role),
+          })),
+        });
+      }
 
-    const db = getDatabase();
-    const rows = db
-      .prepare(
-        `SELECT id, name, role
+      const db = getDatabase();
+      const rows = db
+        .prepare(
+          `SELECT id, name, role
          FROM users
          WHERE is_active = 1 AND pin_hash IS NOT NULL
          ORDER BY CASE role
@@ -456,21 +504,22 @@ router.get('/pin-users', authRateLimit({ max: 600 }), asyncHandler(async (_req: 
            WHEN 'chef' THEN 5
            ELSE 6
          END, name COLLATE NOCASE ASC`,
-      )
-      .all() as Array<{ id: string; name: string; role: string }>;
+        )
+        .all() as Array<{ id: string; name: string; role: string }>;
 
-    res.json({
-      users: rows.map((row) => ({
-        id: String(row.id),
-        name: String(row.name),
-        role: String(row.role),
-      })),
-    });
-  } catch (error: unknown) {
-    console.error('[Auth] PIN users error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-}));
+      res.json({
+        users: rows.map((row) => ({
+          id: String(row.id),
+          name: String(row.name),
+          role: String(row.role),
+        })),
+      });
+    } catch (error: unknown) {
+      console.error('[Auth] PIN users error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }),
+);
 
 // ── POST /api/auth/pin-login ──────────────────────────────────────────────────
 // Quick user switch via PIN for a specifically selected user_id.
@@ -679,77 +728,87 @@ router.post(
 // ── POST /api/auth/tenants/select ─────────────────────────────────────────────
 // Frontend calls this after login (even when auto-selecting the single tenant).
 
-router.post('/tenants/select', asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
+router.post(
+  '/tenants/select',
+  asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'No token provided' });
+      }
 
-    const token = authHeader.split(' ')[1];
-    if (isTokenRevoked(token)) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    const decoded = jwt.verify(token, getJWTSecret()) as any;
+      const token = authHeader.split(' ')[1];
+      if (isTokenRevoked(token)) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+      const decoded = jwt.verify(token, getJWTSecret()) as any;
 
-    if (isCloudDatabaseConfigured()) {
-      const { rows } = await queryPostgres(
-        'SELECT id, name, email, role, is_active, tokens_valid_after FROM users WHERE id = $1',
-        [decoded.userId],
-      );
-      const user = rows[0] as any;
+      if (isCloudDatabaseConfigured()) {
+        const { rows } = await queryPostgres(
+          'SELECT id, name, email, role, is_active, tokens_valid_after FROM users WHERE id = $1',
+          [decoded.userId],
+        );
+        const user = rows[0] as any;
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (user.is_active !== 1 || isTokenStale(decoded.iat, user.tokens_valid_after)) {
+          return res.status(401).json({ error: 'Invalid token' });
+        }
+
+        const tenant = await buildCloudTenant(user.id, user.role);
+        const remember = !!decoded.remember;
+        const newToken = jwt.sign(
+          {
+            userId: user.id,
+            email: user.email,
+            role: user.role,
+            tenantId: 1,
+            remember,
+            jti: randomUUID(),
+          },
+          getJWTSecret(),
+          { expiresIn: expiresInFor(remember) },
+        );
+        return res.json({ access_token: newToken, token_type: 'bearer', tenant });
+      }
+
+      const db = getDatabase();
+      const user = db
+        .prepare(
+          'SELECT id, name, email, role, is_active, tokens_valid_after FROM users WHERE id = ?',
+        )
+        .get(decoded.userId) as any;
       if (!user) return res.status(404).json({ error: 'User not found' });
       if (user.is_active !== 1 || isTokenStale(decoded.iat, user.tokens_valid_after)) {
         return res.status(401).json({ error: 'Invalid token' });
       }
 
-      const tenant = await buildCloudTenant(user.id, user.role);
+      const tenant = buildLocalTenant(db, user.id, user.role);
+
+      // Re-issue token with tenant context embedded (same payload — desktop is single-tenant)
       const remember = !!decoded.remember;
       const newToken = jwt.sign(
-        { userId: user.id, email: user.email, role: user.role, tenantId: 1, remember, jti: randomUUID() },
+        {
+          userId: user.id,
+          email: user.email,
+          role: user.role,
+          tenantId: 1,
+          remember,
+          jti: randomUUID(),
+        },
         getJWTSecret(),
         { expiresIn: expiresInFor(remember) },
       );
-      return res.json({ access_token: newToken, token_type: 'bearer', tenant });
+
+      res.json({
+        access_token: newToken,
+        token_type: 'bearer',
+        tenant,
+      });
+    } catch (error: any) {
+      res.status(401).json({ error: 'Invalid token' });
     }
-
-    const db = getDatabase();
-    const user = db
-      .prepare(
-        'SELECT id, name, email, role, is_active, tokens_valid_after FROM users WHERE id = ?',
-      )
-      .get(decoded.userId) as any;
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.is_active !== 1 || isTokenStale(decoded.iat, user.tokens_valid_after)) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-
-    const tenant = buildLocalTenant(db, user.id, user.role);
-
-    // Re-issue token with tenant context embedded (same payload — desktop is single-tenant)
-    const remember = !!decoded.remember;
-    const newToken = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-        tenantId: 1,
-        remember,
-        jti: randomUUID(),
-      },
-      getJWTSecret(),
-      { expiresIn: expiresInFor(remember) },
-    );
-
-    res.json({
-      access_token: newToken,
-      token_type: 'bearer',
-      tenant,
-    });
-  } catch (error: any) {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-}));
+  }),
+);
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────────
 
@@ -770,130 +829,143 @@ router.post('/logout', (req: Request, res: Response) => {
 
 // ── POST /api/auth/refresh ────────────────────────────────────────────────────
 
-router.post('/refresh', asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
+router.post(
+  '/refresh',
+  asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'No token provided' });
+      }
 
-    const token = authHeader.split(' ')[1];
-    if (isTokenRevoked(token)) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    const decoded = jwt.verify(token, getJWTSecret()) as any;
+      const token = authHeader.split(' ')[1];
+      if (isTokenRevoked(token)) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+      const decoded = jwt.verify(token, getJWTSecret()) as any;
 
-    if (isCloudDatabaseConfigured()) {
-      const { rows } = await queryPostgres(
-        'SELECT role, is_active, tokens_valid_after FROM users WHERE id = $1',
-        [decoded.userId],
-      );
-      const user = rows[0] as any;
+      if (isCloudDatabaseConfigured()) {
+        const { rows } = await queryPostgres(
+          'SELECT role, is_active, tokens_valid_after FROM users WHERE id = $1',
+          [decoded.userId],
+        );
+        const user = rows[0] as any;
+        if (!user || user.is_active !== 1 || isTokenStale(decoded.iat, user.tokens_valid_after)) {
+          return res.status(401).json({ error: 'Invalid token' });
+        }
+
+        const remember = !!decoded.remember;
+        const newToken = jwt.sign(
+          {
+            userId: decoded.userId,
+            email: decoded.email,
+            role: user.role,
+            tenantId: decoded.tenantId,
+            remember,
+            jti: randomUUID(),
+          },
+          getJWTSecret(),
+          { expiresIn: expiresInFor(remember) },
+        );
+        return res.json({
+          access_token: newToken,
+          token_type: 'bearer',
+          expires_in: remember ? JWT_REMEMBER_EXPIRES_IN_SECONDS : 86400,
+        });
+      }
+
+      // Without this, a token minted before a password/PIN change (#173) could
+      // keep refreshing itself into new tokens forever, bypassing revocation entirely.
+      const db = getDatabase();
+      const user = db
+        .prepare('SELECT role, is_active, tokens_valid_after FROM users WHERE id = ?')
+        .get(decoded.userId) as any;
       if (!user || user.is_active !== 1 || isTokenStale(decoded.iat, user.tokens_valid_after)) {
         return res.status(401).json({ error: 'Invalid token' });
       }
 
       const remember = !!decoded.remember;
       const newToken = jwt.sign(
-        { userId: decoded.userId, email: decoded.email, role: user.role, tenantId: decoded.tenantId, remember, jti: randomUUID() },
+        {
+          userId: decoded.userId,
+          email: decoded.email,
+          role: user.role,
+          tenantId: decoded.tenantId,
+          remember,
+          jti: randomUUID(),
+        },
         getJWTSecret(),
         { expiresIn: expiresInFor(remember) },
       );
-      return res.json({
+
+      res.json({
         access_token: newToken,
         token_type: 'bearer',
         expires_in: remember ? JWT_REMEMBER_EXPIRES_IN_SECONDS : 86400,
       });
+    } catch {
+      res.status(401).json({ error: 'Invalid token' });
     }
-
-    // Without this, a token minted before a password/PIN change (#173) could
-    // keep refreshing itself into new tokens forever, bypassing revocation entirely.
-    const db = getDatabase();
-    const user = db
-      .prepare('SELECT role, is_active, tokens_valid_after FROM users WHERE id = ?')
-      .get(decoded.userId) as any;
-    if (!user || user.is_active !== 1 || isTokenStale(decoded.iat, user.tokens_valid_after)) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-
-    const remember = !!decoded.remember;
-    const newToken = jwt.sign(
-      {
-        userId: decoded.userId,
-        email: decoded.email,
-        role: user.role,
-        tenantId: decoded.tenantId,
-        remember,
-        jti: randomUUID(),
-      },
-      getJWTSecret(),
-      { expiresIn: expiresInFor(remember) },
-    );
-
-    res.json({
-      access_token: newToken,
-      token_type: 'bearer',
-      expires_in: remember ? JWT_REMEMBER_EXPIRES_IN_SECONDS : 86400,
-    });
-  } catch {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-}));
+  }),
+);
 
 // ── GET /api/auth/me ──────────────────────────────────────────────────────────
 
-router.get('/me', asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
+router.get(
+  '/me',
+  asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'No token provided' });
+      }
 
-    const token = authHeader.split(' ')[1];
-    if (isTokenRevoked(token)) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    const decoded = jwt.verify(token, getJWTSecret()) as any;
+      const token = authHeader.split(' ')[1];
+      if (isTokenRevoked(token)) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+      const decoded = jwt.verify(token, getJWTSecret()) as any;
 
-    if (isCloudDatabaseConfigured()) {
-      const { rows } = await queryPostgres(
-        'SELECT id, name, email, role, is_active, tokens_valid_after FROM users WHERE id = $1',
-        [decoded.userId],
-      );
-      const user = rows[0] as any;
+      if (isCloudDatabaseConfigured()) {
+        const { rows } = await queryPostgres(
+          'SELECT id, name, email, role, is_active, tokens_valid_after FROM users WHERE id = $1',
+          [decoded.userId],
+        );
+        const user = rows[0] as any;
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (user.is_active !== 1 || isTokenStale(decoded.iat, user.tokens_valid_after)) {
+          return res.status(401).json({ error: 'Invalid token' });
+        }
+
+        const tenant = await buildCloudTenant(user.id, user.role);
+        return res.json({
+          user: { id: user.id, name: user.name, email: user.email, role: user.role },
+          tenants: [tenant],
+        });
+      }
+
+      const db = getDatabase();
+      const user = db
+        .prepare(
+          'SELECT id, name, email, role, is_active, tokens_valid_after FROM users WHERE id = ?',
+        )
+        .get(decoded.userId) as any;
       if (!user) return res.status(404).json({ error: 'User not found' });
       if (user.is_active !== 1 || isTokenStale(decoded.iat, user.tokens_valid_after)) {
         return res.status(401).json({ error: 'Invalid token' });
       }
 
-      const tenant = await buildCloudTenant(user.id, user.role);
-      return res.json({
+      const tenant = buildLocalTenant(db, user.id, user.role);
+
+      res.json({
         user: { id: user.id, name: user.name, email: user.email, role: user.role },
         tenants: [tenant],
       });
+    } catch {
+      res.status(401).json({ error: 'Invalid token' });
     }
-
-    const db = getDatabase();
-    const user = db
-      .prepare(
-        'SELECT id, name, email, role, is_active, tokens_valid_after FROM users WHERE id = ?',
-      )
-      .get(decoded.userId) as any;
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.is_active !== 1 || isTokenStale(decoded.iat, user.tokens_valid_after)) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-
-    const tenant = buildLocalTenant(db, user.id, user.role);
-
-    res.json({
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
-      tenants: [tenant],
-    });
-  } catch {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-}));
+  }),
+);
 
 // ── POST /api/auth/password/change ────────────────────────────────────────────
 
@@ -1251,43 +1323,48 @@ router.post(
 // ── GET /api/auth/setup/status ──────────────────────────────────────────────────
 // Returns whether the app needs setup (no users exist yet)
 
-router.get('/setup/status', asyncHandler(async (_req: Request, res: Response) => {
-  try {
-    if (isCloudDatabaseConfigured()) {
-      const seedResult = await ensurePostgresOwner();
-      const countRes = await queryPostgres<{ count: string }>('SELECT COUNT(*) as count FROM users');
-      const userCount = parseInt(countRes.rows[0]?.count || '0', 10);
-      return res.json({
-        needsSetup: userCount === 0,
+router.get(
+  '/setup/status',
+  asyncHandler(async (_req: Request, res: Response) => {
+    try {
+      if (isCloudDatabaseConfigured()) {
+        const seedResult = await ensurePostgresOwner();
+        const countRes = await queryPostgres<{ count: string }>(
+          'SELECT COUNT(*) as count FROM users',
+        );
+        const userCount = parseInt(countRes.rows[0]?.count || '0', 10);
+        return res.json({
+          needsSetup: userCount === 0,
+          userCount,
+          initialRole: INITIAL_ADMIN_ROLE,
+          schemaVersion: 0,
+          masterPinAvailable: false,
+          cloudRecoveryAvailable: false,
+          currencyReset: null,
+          cloudDatabase: true,
+          seedResult: seedResult.seeded ? 'owner_created' : seedResult.reason,
+        });
+      }
+
+      const db = getDatabase();
+      const userCount = getUserCount(db);
+      const needsSetup = userCount === 0;
+      const currencyReset = needsSetup ? getPendingCurrencyReset(db) : null;
+      res.json({
+        needsSetup,
         userCount,
         initialRole: INITIAL_ADMIN_ROLE,
-        schemaVersion: 0,
-        masterPinAvailable: false,
-        cloudRecoveryAvailable: false,
-        currencyReset: null,
-        cloudDatabase: true,
-        seedResult: seedResult.seeded ? 'owner_created' : seedResult.reason,
+        schemaVersion: getCurrentSchemaVersion(),
+        masterPinAvailable: isMasterPinAvailable(),
+        cloudRecoveryAvailable: cloudSync.isEmailRecoveryAvailable(),
+        currencyReset,
       });
+    } catch (error: any) {
+      console.error('[API] Internal error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
-
-    const db = getDatabase();
-    const userCount = getUserCount(db);
-    const needsSetup = userCount === 0;
-    const currencyReset = needsSetup ? getPendingCurrencyReset(db) : null;
-    res.json({
-      needsSetup,
-      userCount,
-      initialRole: INITIAL_ADMIN_ROLE,
-      schemaVersion: getCurrentSchemaVersion(),
-      masterPinAvailable: isMasterPinAvailable(),
-      cloudRecoveryAvailable: cloudSync.isEmailRecoveryAvailable(),
-      currencyReset,
-    });
-  } catch (error: any) {
-    console.error('[API] Internal error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-}));
+  }),
+);
 
 // ── POST /api/auth/setup/restore ────────────────────────────────────────────────
 // A brand-new install has no accounts to authorise against and nothing to lose,

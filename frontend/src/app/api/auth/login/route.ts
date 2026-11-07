@@ -45,6 +45,13 @@ async function buildCloudTenant(userId: string, userRole: string) {
     );
     settings = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error(
+      '[VERCEL_DB_ERROR]: Error fetching settings for cloud tenant:',
+      errorMsg,
+      errorStack,
+    );
     console.error('[DB_AUTH_ERROR]: Error fetching settings for cloud tenant:', error);
   }
 
@@ -93,9 +100,14 @@ export async function POST(req: NextRequest) {
       const configError = new Error(
         'Cloud database is not configured. DATABASE_URL or POSTGRES_URL environment variable is missing.',
       );
+      console.error('[VERCEL_DB_ERROR]:', configError.message, configError.stack);
       console.error('[DB_AUTH_ERROR]:', configError);
       return NextResponse.json(
-        { error: 'Cloud database is not configured. DATABASE_URL is missing.' },
+        {
+          error: configError.message,
+          message: configError.message,
+          details: configError.message,
+        },
         { status: 500 },
       );
     }
@@ -104,6 +116,9 @@ export async function POST(req: NextRequest) {
     try {
       await ensurePostgresOwner();
     } catch (seedError: unknown) {
+      const seedMsg = seedError instanceof Error ? seedError.message : String(seedError);
+      const seedStack = seedError instanceof Error ? seedError.stack : undefined;
+      console.error('[VERCEL_DB_ERROR]: Initial seed check warning:', seedMsg, seedStack);
       console.error('[DB_AUTH_ERROR]: Initial seed check warning:', seedError);
     }
 
@@ -142,6 +157,8 @@ export async function POST(req: NextRequest) {
           passwordMatches = password === storedPassword;
         }
       } catch (err: unknown) {
+        const errObj = err instanceof Error ? err : new Error(String(err));
+        console.error('[VERCEL_DB_ERROR]: bcrypt comparison error:', errObj.message, errObj.stack);
         console.error('[DB_AUTH_ERROR]: bcrypt comparison error:', err);
         passwordMatches = false;
       }
@@ -186,15 +203,18 @@ export async function POST(req: NextRequest) {
       tenants: [tenant],
     });
   } catch (error: unknown) {
-    // Explicit DB_AUTH_ERROR logging required for Vercel Runtime Logs debugging
-    console.error('[DB_AUTH_ERROR]:', error);
-
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+
+    // Explicit VERCEL_DB_ERROR logging required for Vercel Runtime Logs debugging
+    console.error('[VERCEL_DB_ERROR]:', errorMessage, errorStack);
+    console.error('[DB_AUTH_ERROR]:', error);
 
     return NextResponse.json(
       {
-        error: 'Database connection error during login',
-        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
+        error: errorMessage || 'Database connection error during login',
+        message: errorMessage,
+        details: errorMessage,
       },
       { status: 500 },
     );
